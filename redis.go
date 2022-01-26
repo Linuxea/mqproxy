@@ -9,8 +9,7 @@ type RedisMq struct {
 }
 
 func (r *RedisMq) produce(dest string, data interface{}) error {
-	r.redisCli.Publish(dest, data)
-	return nil
+	return r.redisCli.Publish(dest, data).Err()
 }
 
 func (r *RedisMq) require(dest, name, group string) (interface{}, error) {
@@ -19,11 +18,18 @@ func (r *RedisMq) require(dest, name, group string) (interface{}, error) {
 	return (<-subscribe.Channel()).Payload, nil
 }
 
-func (r *RedisMq) consume(dest, name, group string, businessFunc func(data interface{}) error) error {
-	b, err := r.require(dest, name, group)
-	if err != nil {
-		return err
-	}
+func (r *RedisMq) consume(dest, name, group string, bf businessFunc, eh errHandler) {
 
-	return businessFunc(b)
+	for {
+		var err error
+		b, err := r.require(dest, name, group)
+		if err != nil {
+			eh(err)
+			return
+		}
+
+		if err = bf(b); err != nil {
+			eh(err)
+		}
+	}
 }

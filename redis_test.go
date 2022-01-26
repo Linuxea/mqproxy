@@ -1,11 +1,20 @@
 package mqproxy
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 
 	"github.com/go-redis/redis"
 )
+
+type news struct {
+	Title, Content string
+}
+
+func (s *news) String() string {
+	return fmt.Sprintf("标题:%s\n内容:%s", s.Title, s.Content)
+}
 
 func TestConsume(t *testing.T) {
 
@@ -19,14 +28,14 @@ func TestConsume(t *testing.T) {
 	var mqClient MqClient
 	mqClient = &RedisMq{redisCli: redisClient}
 
-	for {
-
-		mqClient.consume("news", "", "", func(data interface{}) error {
-			fmt.Println("今天的新闻是", data.(string))
-			return nil
-		})
-
-	}
+	mqClient.consume("news", "consumer", "group", func(data interface{}) error {
+		n := news{}
+		json.Unmarshal([]byte(data.(string)), &n)
+		fmt.Println(&n)
+		return nil
+	}, func(err error) {
+		t.Error("有错了" + err.Error())
+	})
 
 }
 
@@ -42,7 +51,12 @@ func TestProduce(t *testing.T) {
 	var mqserver MqServer
 	mqserver = &RedisMq{redisCli: redisClient}
 
-	if err := mqserver.produce("news", "俄罗斯与乌克兰纠纷日益严重，国际社会开始对此表示担忧"); err != nil {
+	n := &news{
+		Title:   "今天早报",
+		Content: "俄罗斯与乌克兰纠纷日益严重，国际社会开始对此表示高度关注",
+	}
+	b, _ := json.Marshal(n)
+	if err := mqserver.produce("news", string(b)); err != nil {
 		t.Error(err)
 	}
 
